@@ -1,0 +1,38 @@
+[
+  {
+    "id": "t_001",
+    "title": "更新定价页",
+    "description": "按 Q3 套餐调整官网定价与对照表。",
+    "status": "in_progress",
+    "owner_id": "u_alice",
+    "due_date": "2026-09-22",
+    "created_at": "2026-09-01T09:00:00"
+  },
+  {
+    "id": "t_002",
+    "title": "修复登录超时",
+    "description": "会话在 15 分钟空闲后意外过期，需复现并修复。",
+    "status": "in_progress",
+    "owner_id": "u_bob",
+    "due_date": "2026-09-18",
+    "created_at": "2026-09-02T10:30:00"
+  },
+  {
+    "id": "t_003",
+    "title": "整理 Q3 回顾",
+    "description": "汇总产品指标、客户反馈与下季度议题。",
+    "status": "todo",
+    "owner_id": "u_alice",
+    "due_date": "2026-09-30",
+    "created_at": "2026-09-05T14:00:00"
+  },
+  {
+    "id": "t_004",
+    "title": "过期文档归档",
+    "description": "将 2025 年已失效的内部 wiki 移入归档空间。",
+    "status": "done",
+    "owner_id": "u_bob",
+    "due_date": null,
+    "created_at": "2026-08-20T11:00:00"
+  }
+]
