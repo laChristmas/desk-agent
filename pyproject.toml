@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deskagent"
+version = "0.1.0"
+description = "DeskAgent — multi-tool workflow agent with retrieval, structured queries, and human approval"
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv>=1.0.1",
+    "PyYAML>=6.0.1",
+    "chromadb>=0.5.5",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

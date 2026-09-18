@@ -1,0 +1,25 @@
+# secrets & local environments
+.env
+.venv/
+venv/
+
+# Python build / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# generated local stores
+data/chroma/
+data/*.sqlite
+data/*.sqlite-*
+
+# local interpreter / editor
+.conda/
+.vscode/
+
+# frontend (phase 5)
+node_modules/
+web/dist/
