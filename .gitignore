@@ -23,3 +23,7 @@ data/*.sqlite-*
 # frontend (phase 5)
 node_modules/
 web/dist/
+
+# documents
+DeskAgent-进度规划.md
+DeskAgent-项目说明.md

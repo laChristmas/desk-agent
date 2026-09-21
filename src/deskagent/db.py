@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 
 def connect() -> sqlite3.Connection:
+    """打开 desk.sqlite；父目录不存在则创建。"""
     settings = get_settings()
     settings.db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(settings.db_path)
@@ -34,6 +35,7 @@ def connect() -> sqlite3.Connection:
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
+    """创建 tasks 表（已存在则跳过）。"""
     conn.executescript(SCHEMA)
     conn.commit()
 
@@ -57,6 +59,7 @@ def seed_tasks(conn: sqlite3.Connection, seed_path: Path | None = None) -> int:
 
 
 def init_db() -> dict[str, int]:
+    """建表并导入种子，返回写入条数与表内总行数。"""
     conn = connect()
     try:
         init_schema(conn)

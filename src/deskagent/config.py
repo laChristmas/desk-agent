@@ -18,10 +18,12 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 def _load_env() -> None:
+    """加载仓库根目录的 .env；文件不存在时静默跳过。"""
     load_dotenv(ROOT_DIR / ".env")
 
 
 def _as_path(value: str) -> Path:
+    """相对路径相对仓库根解析，避免依赖当前工作目录。"""
     path = Path(value)
     if path.is_absolute():
         return path
@@ -30,6 +32,8 @@ def _as_path(value: str) -> Path:
 
 @dataclass(frozen=True)
 class Settings:
+    """一次读齐的运行时配置，路径都已是绝对路径。"""
+
     root_dir: Path
     llm_base_url: str
     llm_api_key: str
@@ -46,6 +50,7 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """返回全局 Settings，进程内只构建一次。"""
     _load_env()
     return Settings(
         root_dir=ROOT_DIR,
