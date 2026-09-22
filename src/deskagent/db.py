@@ -173,3 +173,18 @@ def update_task_status(task_id: str, status: str) -> dict:
     finally:
         conn.close()
     return _row_to_task(row)
+
+
+def delete_task(task_id: str) -> dict:
+    """按 id 删除。找不到则不写库，返回 error 字段。"""
+    conn = connect()
+    try:
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            return {"error": "not_found", "task_id": task_id}
+        deleted = _row_to_task(row)
+        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return deleted

@@ -10,6 +10,7 @@ from deskagent.config import get_settings
 from deskagent.db import init_db, list_tasks as db_list_tasks
 from deskagent.tools.tasks import (
     create_task,
+    delete_task,
     get_task,
     list_tasks,
     update_task_status,
@@ -71,5 +72,19 @@ def test_invalid_status_does_not_write(seeded_db):
 
 def test_update_missing_task_is_not_found(seeded_db):
     data = _parse(update_task_status("t_999", "done"))
+    assert data == {"error": "not_found", "task_id": "t_999"}
+    assert len(db_list_tasks()) == 4
+
+
+def test_delete_task_removes_row(seeded_db):
+    before = len(db_list_tasks())
+    data = _parse(delete_task("t_004"))
+    assert data == {"ok": True, "task_id": "t_004"}
+    assert len(db_list_tasks()) == before - 1
+    assert _parse(get_task("t_004")) == {"error": "not_found", "task_id": "t_004"}
+
+
+def test_delete_missing_task_is_not_found(seeded_db):
+    data = _parse(delete_task("t_999"))
     assert data == {"error": "not_found", "task_id": "t_999"}
     assert len(db_list_tasks()) == 4

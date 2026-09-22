@@ -1,6 +1,6 @@
 """图节点：检索、查库、写入（含中断）、回复。
 
-写入在 interrupt 返回之前不得调用 create_task / update_task_status。
+写入在 interrupt 返回之前不得调用 create_task / update_task_status / delete_task。
 LangGraph 从节点开头重跑 resume，因此拟写入内容每次都会再整理一遍，真正写库仍只发生在确认之后。
 """
 
@@ -18,7 +18,13 @@ from deskagent.db import ALLOWED_STATUS
 from deskagent.graph.routing import get_chat_model
 from deskagent.graph.state import AgentState
 from deskagent.tools.docs import search_docs
-from deskagent.tools.tasks import create_task, get_task, list_tasks, update_task_status
+from deskagent.tools.tasks import (
+    create_task,
+    delete_task,
+    get_task,
+    list_tasks,
+    update_task_status,
+)
 
 
 def _message_text(message: Any) -> str:
@@ -156,7 +162,7 @@ def query_db_node(state: AgentState) -> dict:
 
 
 class WritePlan(BaseModel):
-    action: Literal["create_task", "update_task_status"]
+    action: Literal["create_task", "update_task_status", "delete_task"]
     title: str | None = None
     description: str | None = None
     owner_id: str | None = None
@@ -191,7 +197,8 @@ def _plan_write(state: AgentState) -> WritePlan:
             SystemMessage(
                 content=(
                     "根据对话整理一条写操作。"
-                    "创建待办用 create_task；改状态用 update_task_status。"
+                    "创建待办用 create_task；改状态用 update_task_status；删除、删掉、移除任务用 delete_task。"
+                    "delete_task 必须带用户给出的 task_id，禁止猜测 id。"
                     f"{_user_catalog_text()}"
                     "未指定负责人时不要猜测人名，owner_id 留空。"
                     "未指定任务id时必须留空，禁止猜测。"
@@ -233,6 +240,19 @@ def _validated_write_payload(
             )
         return {"task_id": task_id, "status": new_status}, None
 
+    if plan.action == "delete_task":
+        task_id = (plan.task_id or "").strip()
+        if not task_id:
+            return None, _abort_write("missing_task_id", "删除任务需要 task_id。")
+        existing = _parse_json(get_task(task_id))
+        if existing.get("error") == "not_found":
+            return None, _abort_write("not_found", "找不到该任务。", task_id=task_id)
+        task = existing.get("task") or {}
+        return {
+            "task_id": task_id,
+            "title": task.get("title") or "",
+        }, None
+
     title = (plan.title or "").strip()
     if not title:
         return None, _abort_write("missing_title", "创建待办需要非空标题。")
@@ -249,12 +269,22 @@ def _validated_write_payload(
 def _commit_write(action: str, payload: dict) -> str:
     if action == "update_task_status":
         return update_task_status(payload["task_id"], payload["status"])
+    if action == "delete_task":
+        return delete_task(payload["task_id"])
     return create_task(
         title=payload["title"],
         description=payload["description"],
         owner_id=payload["owner_id"],
         due_date=payload["due_date"],
     )
+
+
+def _write_confirm_message(action: str) -> str:
+    if action == "delete_task":
+        return "即将删除任务，请确认或驳回"
+    if action == "update_task_status":
+        return "即将更新任务状态，请确认或驳回"
+    return "即将写入待办，请确认或驳回"
 
 
 def write_node(state: AgentState) -> dict:
@@ -271,7 +301,7 @@ def write_node(state: AgentState) -> dict:
             "type": "write_task",
             "action": plan.action,
             "payload": payload,
-            "message": "即将写入待办，请确认或驳回",
+            "message": _write_confirm_message(plan.action),
         }
     )
     if not _is_confirmed(approval):
@@ -301,10 +331,10 @@ def respond_node(state: AgentState) -> dict:
     if last_route == "write":
         rules += (
             "上一跳已经处理完写入，结果在对话里。"
-            "若出现「已取消写入」，告诉用户待办没有创建、数据库未改。"
-            "若出现 [write] 且 JSON 里 ok 为 true，说明已经写入成功，并带上 task_id。"
+            "若出现「已取消写入」，告诉用户没有改库。"
+            "若出现 [write] 且 JSON 里 ok 为 true，说明创建、改状态或删除已经成功，并带上 task_id。"
             "若 JSON 里有 error，转述错误原因。"
-            "禁止说你无法创建待办、无法调用工具、或还需要再确认一次。"
+            "禁止说你无法创建或删除待办、无法调用工具、或还需要再确认一次。"
             "不要编造未出现的字段。"
         )
     elif last_route == "query_db":

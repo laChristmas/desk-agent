@@ -38,3 +38,11 @@ def update_task_status(task_id: str, status: str) -> str:
     if result.get("error"):
         return json.dumps(result, ensure_ascii=False)
     return json.dumps({"ok": True, "task_id": result["id"]}, ensure_ascii=False)
+
+
+def delete_task(task_id: str) -> str:
+    """删除任务。找不到则返回 error JSON，不写库。"""
+    result = db.delete_task(task_id)
+    if result.get("error"):
+        return json.dumps(result, ensure_ascii=False)
+    return json.dumps({"ok": True, "task_id": result["id"]}, ensure_ascii=False)

@@ -78,6 +78,7 @@ export default function App() {
   }
 
   const payload = pending?.payload || {};
+  const isDelete = pending?.action === "delete_task";
 
   return (
     <div className="shell">
@@ -108,7 +109,7 @@ export default function App() {
           <div className="chat-log" ref={logRef}>
             {messages.length === 0 && (
               <p className="hint">
-                试试：「退款周期是多久？给出处。」或「帮我建一条待办：发货前核对收货地址」
+                试试：「退款周期是多久？给出处。」、「帮我建一条待办：发货前核对收货地址」或「删除任务 t_004」
               </p>
             )}
             {messages.map((item, index) => (
@@ -141,7 +142,7 @@ export default function App() {
       {pending && (
         <section className="pending">
           <div>
-            <h2>待确认写入</h2>
+            <h2>{isDelete ? "待确认删除" : "待确认写入"}</h2>
             <p>{pending.message || "即将写入待办，请确认或驳回"}</p>
             <pre>{JSON.stringify(payload, null, 2)}</pre>
           </div>
@@ -155,7 +156,7 @@ export default function App() {
               disabled={busy}
               onClick={() => decide(true)}
             >
-              确认写入
+              {isDelete ? "确认删除" : "确认写入"}
             </button>
           </div>
         </section>
