@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.types import interrupt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from deskagent.config import get_settings
 from deskagent.db import ALLOWED_STATUS
@@ -65,6 +65,11 @@ def _user_catalog_text() -> str:
     )
 
 
+def _optional_text(value: str | None) -> str | None:
+    text = (value or "").strip()
+    return text or None
+
+
 def retrieve_node(state: AgentState) -> dict:
     """只调 search_docs，把 citations 写入 state，不生成最终答复。"""
     query = _last_user_text(state)
@@ -90,9 +95,18 @@ def retrieve_node(state: AgentState) -> dict:
 
 class DbQuery(BaseModel):
     action: Literal["list_tasks", "get_task"]
-    status: str | None = None
-    owner_id: str | None = None
-    task_id: str | None = None
+    status: Literal["todo", "in_progress", "done"] | None = Field(
+        default=None,
+        description="仅当用户提到状态时填写；未提则 null，不要猜测。",
+    )
+    owner_id: str | None = Field(
+        default=None,
+        description="仅当用户点名负责人时填写对应 id；未提则 null，不要填当前用户。",
+    )
+    task_id: str | None = Field(
+        default=None,
+        description="仅当用户给出任务 id 时填写；未提则 null，不要猜测。",
+    )
 
 
 def query_db_node(state: AgentState) -> dict:
@@ -103,22 +117,26 @@ def query_db_node(state: AgentState) -> dict:
             SystemMessage(
                 content=(
                     "根据用户问题决定查任务列表还是单条任务。"
-                    "status 只能是 todo / in_progress / done，不确定则留空。"
+                    "status 只能是 todo / in_progress / done；用户说到进行中、待办、已完成时由你对应到这三个值。"
+                    "用户没提到状态、负责人或任务 id 的字段必须为 null，禁止猜测、禁止填当前用户。"
                     f"{_user_catalog_text()}"
                     "用户要看某一条、谁负责某 id、把某条标为完成，用 get_task。"
                     "用户要一批（进行中的、某人名下的），用 list_tasks。"
-                    "只填需要的字段。"
+                    "只填用户明确提到的字段。"
                 )
             ),
             *state.get("messages", []),
         ]
     )
+    task_id = _optional_text(plan.task_id)
+    owner_id = _optional_text(plan.owner_id)
+    status = plan.status
     if plan.action == "get_task":
-        if plan.task_id:
-            raw = get_task(plan.task_id)
+        if task_id:
+            raw = get_task(task_id)
         else:
             listed = _parse_json(
-                list_tasks(status=plan.status, owner_id=plan.owner_id)
+                list_tasks(status=status, owner_id=owner_id)
             )
             raw = json.dumps(
                 {
@@ -129,7 +147,7 @@ def query_db_node(state: AgentState) -> dict:
                 ensure_ascii=False,
             )
     else:
-        raw = list_tasks(status=plan.status, owner_id=plan.owner_id)
+        raw = list_tasks(status=status, owner_id=owner_id)
     return {
         "messages": [AIMessage(content=f"[query_db]\n{raw}")],
         "citations": [],
@@ -276,10 +294,20 @@ def respond_node(state: AgentState) -> dict:
     citation_block = json.dumps(citations, ensure_ascii=False, indent=2)
     rules = (
         "你是 Northwind Labs 内部工作台助手。"
-        "只根据对话里的检索/查库结果回答。"
-        "不要调用工具。"
+        "不要调用工具，也不要说你将去调用工具。"
     )
-    if last_route == "retrieve" and not citations:
+    if last_route == "write":
+        rules += (
+            "上一跳已经处理完写入，结果在对话里。"
+            "若出现「已取消写入」，告诉用户待办没有创建、数据库未改。"
+            "若出现 [write] 且 JSON 里 ok 为 true，说明已经写入成功，并带上 task_id。"
+            "若 JSON 里有 error，转述错误原因。"
+            "禁止说你无法创建待办、无法调用工具、或还需要再确认一次。"
+            "不要编造未出现的字段。"
+        )
+    elif last_route == "query_db":
+        rules += "只根据对话里的查库结果回答。不要检索制度，不要编造任务 id。"
+    elif last_route == "retrieve" and not citations:
         rules += (
             "当前没有检索命中。必须明确说不知道或没有依据，禁止编造制度、天数或条款。"
         )
@@ -288,6 +316,8 @@ def respond_node(state: AgentState) -> dict:
             "制度类回答必须依据 citations，提到文档标题或 chunk_id，不要超出摘录。"
             f"\ncitations:\n{citation_block}"
         )
+    else:
+        rules += "只根据对话里已有内容回答，不要编造制度或任务。"
     llm = get_chat_model()
     reply = llm.invoke(
         [SystemMessage(content=rules), *state.get("messages", [])]
