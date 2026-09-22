@@ -33,7 +33,13 @@ write    → respond → END
 | 寒暄，或总结已经检索/查库的结果 | `respond` |
 | 刚检索完且没有出处 | `respond` 拒答，不编条款 |
 
-查库过滤条件（`task_id` / `owner_id` / `status`）只采用模型结构化输出：用户没提到的字段保持为空，代码不会用当前用户去补。创建待办未指定负责人时，owner 用请求头里的当前用户，不写死成某个种子账号。删除必须带用户给出的 `task_id`，找不到则直接返回 `not_found`，不弹出确认。
+查库过滤条件（`task_id` / `owner_id` / `status`）只采用模型结构化输出：用户没提到的字段保持为空，代码不会用当前用户去补。
+
+写入只有三种 action：`create_task`、`update_task`、`delete_task`。
+
+- 创建未指定负责人时，owner 用请求头里的当前用户，不写死成某个种子账号。
+- `update_task` 按传入键部分更新 `title` / `description` / `owner_id` / `due_date` / `status`。一次确认可以改多个字段，payload 只带实际变化的键。改负责人时把姓名映射为名册里的 id，未点名则不填当前用户。非法 `status`、空标题、未知负责人、字段与当前值相同，直接返回错误，不弹出确认。
+- 修改和删除都必须带用户给出的 `task_id`，禁止猜测。找不到则返回 `not_found`，不写库。
 
 ## HTTP 与前端
 
@@ -50,9 +56,9 @@ desk-agent/
   src/deskagent/
     app.py                 # FastAPI：/chat、/chat/resume、/health
     config.py              # 路径相对仓库根；.env
-    db.py                  # tasks 表
+    db.py                  # tasks 表：list / get / create / update / delete
     kb/                    # 切块、Chroma、检索
-    tools/                 # search_docs / 任务 JSON 工具
+    tools/                 # search_docs、list_tasks、get_task、create_task、update_task、delete_task
     graph/                 # 状态、路由、节点、组图
   web/                     # Vite + React
   data/
@@ -121,7 +127,7 @@ npm run dev
 python -m pytest tests/test_tasks.py -q
 ```
 
-用例使用临时 SQLite，不会改 `data/desk.sqlite`。覆盖：进行中列表、`not_found`、创建、部分更新字段、非法 status 不写库、删除已有任务、删除缺失 id。
+用例使用临时 SQLite，不会改 `data/desk.sqlite`。覆盖：进行中列表、`not_found`、创建、部分更新标题/描述/负责人/截止日期/状态、清空截止日期、非法 status 不写库、空标题不写库、删除已有任务、删除缺失 id。
 
 ## 尚未包含
 
