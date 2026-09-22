@@ -6,7 +6,7 @@ category: FAQ
 
 # 退款政策
 
-本文说明 Northwind Labs 协作产品的退款规则。制度问答必须引用本文，不得凭记忆改写天数。
+本文说明 Northwind Labs 协作产品的退款规则。
 
 ## 标准退款周期
 

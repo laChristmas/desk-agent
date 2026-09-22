@@ -6,7 +6,7 @@ category: FAQ
 
 # 入职指南
 
-面向 Northwind Labs 新同事的第一周安排。本文不涉及退款或发版。
+面向 Northwind Labs 新同事的第一周安排。
 
 ## 入职第一天
 
