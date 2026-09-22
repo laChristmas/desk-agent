@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { consumeSse, postChat, postResume } from "./api.js";
 
 const USERS = [
@@ -15,6 +15,17 @@ export default function App() {
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const logRef = useRef(null);
+
+  function scrollChatToBottom() {
+    const el = logRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  useLayoutEffect(() => {
+    scrollChatToBottom();
+  }, [messages, busy, error]);
 
   function applyEvent(event) {
     if (event.type === "meta" && event.thread_id) {
@@ -94,19 +105,21 @@ export default function App() {
       <main className="board">
         <section className="chat">
           <h2>聊天记录</h2>
-          {messages.length === 0 && (
-            <p className="hint">
-              试试：「退款周期是多久？给出处。」或「帮我建一条待办：发货前核对收货地址」
-            </p>
-          )}
-          {messages.map((item, index) => (
-            <article key={index} className={`bubble ${item.role}`}>
-              <span className="who">{item.role === "user" ? "你" : "助手"}</span>
-              <pre>{item.content}</pre>
-            </article>
-          ))}
-          {busy && <p className="hint">处理中…</p>}
-          {error && <p className="error">{error}</p>}
+          <div className="chat-log" ref={logRef}>
+            {messages.length === 0 && (
+              <p className="hint">
+                试试：「退款周期是多久？给出处。」或「帮我建一条待办：发货前核对收货地址」
+              </p>
+            )}
+            {messages.map((item, index) => (
+              <article key={index} className={`bubble ${item.role}`}>
+                <span className="who">{item.role === "user" ? "你" : "助手"}</span>
+                <pre>{item.content}</pre>
+              </article>
+            ))}
+            {busy && <p className="hint">处理中…</p>}
+            {error && <p className="error">{error}</p>}
+          </div>
         </section>
 
         <aside className="cites">

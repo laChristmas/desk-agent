@@ -95,6 +95,19 @@ textarea {
   overflow: auto;
 }
 
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .bubble {
   margin-bottom: 12px;
 }
