@@ -193,9 +193,11 @@ def _plan_write(state: AgentState) -> WritePlan:
                     "根据对话整理一条写操作。"
                     "创建待办用 create_task；改状态用 update_task_status。"
                     f"{_user_catalog_text()}"
-                    "未指定负责人时不要猜测人名，owner_id 留空，由系统填当前用户。"
+                    "未指定负责人时不要猜测人名，owner_id 留空。"
+                    "未指定任务id时必须留空，禁止猜测。"
                     "status 只能是 todo / in_progress / done。"
                     "不要执行写入，只填字段。"
+                    "只填用户明确提到的字段。"
                 )
             ),
             *state.get("messages", []),
