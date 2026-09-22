@@ -166,10 +166,9 @@ def _abort_write(error: str, message: str, **extra: Any) -> dict:
     }
 
 
-def write_node(state: AgentState) -> dict:
-    """整理拟写入内容后 interrupt；确认前不写 SQLite。"""
+def _plan_write(state: AgentState) -> WritePlan:
     llm = get_chat_model().with_structured_output(WritePlan)
-    plan = llm.invoke(
+    return llm.invoke(
         [
             SystemMessage(
                 content=(
@@ -184,54 +183,77 @@ def write_node(state: AgentState) -> dict:
             *state.get("messages", []),
         ]
     )
-    owner_id = plan.owner_id or state.get("user_id") or None
 
+
+def _validated_write_payload(
+    plan: WritePlan, owner_id: str | None
+) -> tuple[dict | None, dict | None]:
+    """成功 (payload, None)；失败 (None, _abort_write(...))。确认前只读库、不写库。"""
     if plan.action == "update_task_status":
         task_id = (plan.task_id or "").strip()
         new_status = (plan.status or "").strip()
         if not task_id:
-            return _abort_write("missing_task_id", "更新状态需要 task_id。")
+            return None, _abort_write("missing_task_id", "更新状态需要 task_id。")
         if new_status not in ALLOWED_STATUS:
-            return _abort_write(
+            return None, _abort_write(
                 "invalid_status",
                 "status 只能是 todo / in_progress / done。",
                 status=plan.status,
             )
         existing = _parse_json(get_task(task_id))
         if existing.get("error") == "not_found":
-            return _abort_write("not_found", "找不到该任务。", task_id=task_id)
+            return None, _abort_write("not_found", "找不到该任务。", task_id=task_id)
         current_status = (existing.get("task") or {}).get("status")
         if current_status == new_status:
-            return _abort_write(
+            return None, _abort_write(
                 "status_unchanged",
                 f"任务 {task_id} 当前已是 {new_status}，无需修改。",
                 task_id=task_id,
                 status=new_status,
             )
-        payload = {"task_id": task_id, "status": new_status}
-    else:
-        title = (plan.title or "").strip()
-        if not title:
-            return _abort_write("missing_title", "创建待办需要非空标题。")
-        if not owner_id:
-            return _abort_write(
-                "missing_owner",
-                "未指定负责人，且当前用户未知。",
-            )
-        payload = {
-            "title": title,
-            "description": plan.description or "",
-            "owner_id": owner_id,
-            "due_date": plan.due_date,
-        }
+        return {"task_id": task_id, "status": new_status}, None
 
-    pending = {
-        "type": "write_task",
-        "action": plan.action,
-        "payload": payload,
-        "message": "即将写入待办，请确认或驳回",
-    }
-    approval = interrupt(pending)
+    title = (plan.title or "").strip()
+    if not title:
+        return None, _abort_write("missing_title", "创建待办需要非空标题。")
+    if not owner_id:
+        return None, _abort_write("missing_owner", "未指定负责人，且当前用户未知。")
+    return {
+        "title": title,
+        "description": plan.description or "",
+        "owner_id": owner_id,
+        "due_date": plan.due_date,
+    }, None
+
+
+def _commit_write(action: str, payload: dict) -> str:
+    if action == "update_task_status":
+        return update_task_status(payload["task_id"], payload["status"])
+    return create_task(
+        title=payload["title"],
+        description=payload["description"],
+        owner_id=payload["owner_id"],
+        due_date=payload["due_date"],
+    )
+
+
+def write_node(state: AgentState) -> dict:
+    """整理拟写入内容后 interrupt；确认前不写 SQLite。"""
+    plan = _plan_write(state)
+    payload, abort = _validated_write_payload(
+        plan, plan.owner_id or state.get("user_id") or None
+    )
+    if abort:
+        return abort
+
+    approval = interrupt(
+        {
+            "type": "write_task",
+            "action": plan.action,
+            "payload": payload,
+            "message": "即将写入待办，请确认或驳回",
+        }
+    )
     if not _is_confirmed(approval):
         return {
             "messages": [AIMessage(content="已取消写入。")],
@@ -239,15 +261,7 @@ def write_node(state: AgentState) -> dict:
             "last_route": "write",
         }
 
-    if plan.action == "update_task_status":
-        raw = update_task_status(payload["task_id"], payload["status"])
-    else:
-        raw = create_task(
-            title=payload["title"],
-            description=payload["description"],
-            owner_id=payload["owner_id"],
-            due_date=payload["due_date"],
-        )
+    raw = _commit_write(plan.action, payload)
     return {
         "messages": [AIMessage(content=f"[write]\n{raw}")],
         "pending_write": None,
