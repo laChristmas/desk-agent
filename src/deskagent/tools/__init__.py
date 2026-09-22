@@ -4,7 +4,7 @@ from deskagent.tools.tasks import (
     delete_task,
     get_task,
     list_tasks,
-    update_task_status,
+    update_task,
 )
 
 __all__ = [
@@ -12,6 +12,6 @@ __all__ = [
     "list_tasks",
     "get_task",
     "create_task",
-    "update_task_status",
+    "update_task",
     "delete_task",
 ]

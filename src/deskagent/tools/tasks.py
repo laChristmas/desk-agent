@@ -32,9 +32,9 @@ def create_task(
     return json.dumps({"ok": True, "task_id": task["id"]}, ensure_ascii=False)
 
 
-def update_task_status(task_id: str, status: str) -> str:
-    """更新状态。非法 status 或找不到则返回 error JSON，不写库。"""
-    result = db.update_task_status(task_id, status)
+def update_task(task_id: str, fields: dict) -> str:
+    """部分更新标题、描述、负责人、截止日期或状态。找不到或没有可写字段则返回 error JSON。"""
+    result = db.update_task(task_id, fields)
     if result.get("error"):
         return json.dumps(result, ensure_ascii=False)
     return json.dumps({"ok": True, "task_id": result["id"]}, ensure_ascii=False)

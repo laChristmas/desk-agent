@@ -109,7 +109,7 @@ export default function App() {
           <div className="chat-log" ref={logRef}>
             {messages.length === 0 && (
               <p className="hint">
-                试试：「退款周期是多久？给出处。」、「帮我建一条待办：发货前核对收货地址」或「删除任务 t_004」
+                试试：「退款周期是多久？给出处。」或「帮我建一条待办：发货前核对收货地址」
               </p>
             )}
             {messages.map((item, index) => (

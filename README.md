@@ -8,7 +8,7 @@ Northwind Labs 内部工作台 Agent：按问题检索制度、查询待办、�
 
 1. 问退款周期会走知识库，回答带文档出处（`faq-refund`，「14 天」）。
 2. 问进行中的任务只查 SQLite，不搜文档。
-3. 创建、改状态、删除都会在 `write` 节点 `interrupt`；确认前不改库，驳回不写库，确认后才执行对应 SQL。
+3. 创建、改字段（含状态）、删除都会在 `write` 节点 `interrupt`；确认前不改库，驳回不写库，确认后才执行对应 SQL。
 
 ## 图
 
@@ -19,7 +19,7 @@ query_db → respond → END
 write    → respond → END
 ```
 
-`interrupt` 只发生在 **write 节点内部**。暂停时拟写入在 interrupt 的 payload 里，用 `graph.get_state(config)` 读取；节点在 `interrupt` 返回之前不会调用 `create_task` / `update_task_status` / `delete_task`。
+`interrupt` 只发生在 **write 节点内部**。暂停时拟写入在 interrupt 的 payload 里，用 `graph.get_state(config)` 读取；节点在 `interrupt` 返回之前不会调用 `create_task` / `update_task` / `delete_task`。
 
 检索、只读查库、写库的副作用不同，写入必须先停住，因此不用单次 ReAct 把三类工具挂在同一个循环里。
 
@@ -29,7 +29,7 @@ write    → respond → END
 |---|---|
 | 政策 / 规定 / 出处 | `retrieve`（禁止只靠模型记忆） |
 | 任务列表 / 负责人 / 状态 | `query_db` |
-| 创建 / 改状态 / 删除 / 关闭 | `write` |
+| 创建 / 改字段（含状态） / 删除 / 关闭 | `write` |
 | 寒暄，或总结已经检索/查库的结果 | `respond` |
 | 刚检索完且没有出处 | `respond` 拒答，不编条款 |
 
@@ -121,7 +121,7 @@ npm run dev
 python -m pytest tests/test_tasks.py -q
 ```
 
-用例使用临时 SQLite，不会改 `data/desk.sqlite`。覆盖：进行中列表、`not_found`、创建、非法 status 不写库、删除已有任务、删除缺失 id。
+用例使用临时 SQLite，不会改 `data/desk.sqlite`。覆盖：进行中列表、`not_found`、创建、部分更新字段、非法 status 不写库、删除已有任务、删除缺失 id。
 
 ## 尚未包含
 

@@ -13,7 +13,7 @@ from deskagent.tools.tasks import (
     delete_task,
     get_task,
     list_tasks,
-    update_task_status,
+    update_task,
 )
 
 
@@ -63,16 +63,10 @@ def test_create_task_increments_and_is_readable(seeded_db):
 
 def test_invalid_status_does_not_write(seeded_db):
     before = _parse(get_task("t_003"))
-    data = _parse(update_task_status("t_003", "completed"))
+    data = _parse(update_task("t_003", {"status": "completed"}))
     assert data["error"] == "invalid_status"
     after = _parse(get_task("t_003"))
     assert after["task"]["status"] == before["task"]["status"] == "todo"
-    assert len(db_list_tasks()) == 4
-
-
-def test_update_missing_task_is_not_found(seeded_db):
-    data = _parse(update_task_status("t_999", "done"))
-    assert data == {"error": "not_found", "task_id": "t_999"}
     assert len(db_list_tasks()) == 4
 
 
@@ -88,3 +82,67 @@ def test_delete_missing_task_is_not_found(seeded_db):
     data = _parse(delete_task("t_999"))
     assert data == {"error": "not_found", "task_id": "t_999"}
     assert len(db_list_tasks()) == 4
+
+
+def test_update_task_fields(seeded_db):
+    data = _parse(
+        update_task(
+            "t_003",
+            {
+                "title": "整理 Q4 回顾",
+                "description": "补充客户反馈",
+                "owner_id": "u_bob",
+                "due_date": "2026-10-15",
+            },
+        )
+    )
+    assert data == {"ok": True, "task_id": "t_003"}
+    task = _parse(get_task("t_003"))["task"]
+    assert task["title"] == "整理 Q4 回顾"
+    assert task["description"] == "补充客户反馈"
+    assert task["owner_id"] == "u_bob"
+    assert task["due_date"] == "2026-10-15"
+    assert task["status"] == "todo"
+
+
+def test_update_task_clears_due_date_and_keeps_other_fields(seeded_db):
+    before = _parse(get_task("t_001"))["task"]
+    data = _parse(update_task("t_001", {"due_date": None}))
+    assert data == {"ok": True, "task_id": "t_001"}
+    after = _parse(get_task("t_001"))["task"]
+    assert after["due_date"] is None
+    assert after["title"] == before["title"]
+    assert after["owner_id"] == before["owner_id"]
+    assert after["status"] == before["status"]
+
+
+def test_update_task_missing_task_is_not_found(seeded_db):
+    data = _parse(update_task("t_999", {"title": "不会写入"}))
+    assert data == {"error": "not_found", "task_id": "t_999"}
+    assert len(db_list_tasks()) == 4
+
+
+def test_update_task_empty_title_does_not_write(seeded_db):
+    before = _parse(get_task("t_002"))["task"]
+    data = _parse(update_task("t_002", {"title": "  "}))
+    assert data["error"] == "missing_title"
+    after = _parse(get_task("t_002"))["task"]
+    assert after["title"] == before["title"]
+
+
+def test_update_task_missing_fields_does_not_write(seeded_db):
+    before = _parse(get_task("t_002"))["task"]
+    data = _parse(update_task("t_002", {}))
+    assert data == {"error": "missing_fields", "task_id": "t_002"}
+    after = _parse(get_task("t_002"))["task"]
+    assert after == before
+
+
+def test_update_task_can_set_status(seeded_db):
+    before = _parse(get_task("t_003"))["task"]
+    data = _parse(update_task("t_003", {"status": "done"}))
+    assert data == {"ok": True, "task_id": "t_003"}
+    after = _parse(get_task("t_003"))["task"]
+    assert after["status"] == "done"
+    assert after["title"] == before["title"]
+    assert after["owner_id"] == before["owner_id"]

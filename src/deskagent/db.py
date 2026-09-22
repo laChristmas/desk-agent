@@ -153,10 +153,41 @@ def create_task(
     return _row_to_task(row)
 
 
-def update_task_status(task_id: str, status: str) -> dict:
-    """更新状态。非法 status 或找不到任务时不写库，返回 error 字段。"""
-    if status not in ALLOWED_STATUS:
-        return {"error": "invalid_status", "status": status}
+_UPDATE_FIELDS = ("title", "description", "owner_id", "due_date", "status")
+
+
+def update_task(task_id: str, fields: dict) -> dict:
+    """按传入键部分更新。找不到、字段非法或不传字段则不写库。"""
+    updates: dict = {}
+    for key in _UPDATE_FIELDS:
+        if key not in fields:
+            continue
+        value = fields[key]
+        if key == "title":
+            title = (value or "").strip()
+            if not title:
+                return {"error": "missing_title"}
+            updates["title"] = title
+        elif key == "owner_id":
+            owner_id = (value or "").strip()
+            if not owner_id:
+                return {"error": "missing_owner"}
+            updates["owner_id"] = owner_id
+        elif key == "due_date":
+            if value is None:
+                updates["due_date"] = None
+            else:
+                updates["due_date"] = str(value).strip() or None
+        elif key == "status":
+            status = (value or "").strip()
+            if status not in ALLOWED_STATUS:
+                return {"error": "invalid_status", "status": value}
+            updates["status"] = status
+        else:
+            updates["description"] = "" if value is None else str(value)
+    if not updates:
+        return {"error": "missing_fields", "task_id": task_id}
+
     conn = connect()
     try:
         existing = conn.execute(
@@ -164,9 +195,11 @@ def update_task_status(task_id: str, status: str) -> dict:
         ).fetchone()
         if existing is None:
             return {"error": "not_found", "task_id": task_id}
+        assignments = ", ".join(f"{column} = ?" for column in updates)
+        params = [*updates.values(), task_id]
         conn.execute(
-            "UPDATE tasks SET status = ? WHERE id = ?",
-            (status, task_id),
+            f"UPDATE tasks SET {assignments} WHERE id = ?",
+            params,
         )
         conn.commit()
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()

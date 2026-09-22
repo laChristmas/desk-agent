@@ -1,6 +1,6 @@
 """图节点：检索、查库、写入（含中断）、回复。
 
-写入在 interrupt 返回之前不得调用 create_task / update_task_status / delete_task。
+写入在 interrupt 返回之前不得调用 create_task / update_task / delete_task。
 LangGraph 从节点开头重跑 resume，因此拟写入内容每次都会再整理一遍，真正写库仍只发生在确认之后。
 """
 
@@ -23,7 +23,7 @@ from deskagent.tools.tasks import (
     delete_task,
     get_task,
     list_tasks,
-    update_task_status,
+    update_task,
 )
 
 
@@ -69,6 +69,10 @@ def _user_catalog_text() -> str:
     return "已知用户（把提到的姓名映射为 id，未提及则 owner_id 留空）：\n" + json.dumps(
         users, ensure_ascii=False
     )
+
+
+def _known_user_ids() -> set[str]:
+    return {user["id"] for user in _known_users() if user.get("id")}
 
 
 def _optional_text(value: str | None) -> str | None:
@@ -162,13 +166,31 @@ def query_db_node(state: AgentState) -> dict:
 
 
 class WritePlan(BaseModel):
-    action: Literal["create_task", "update_task_status", "delete_task"]
-    title: str | None = None
-    description: str | None = None
-    owner_id: str | None = None
-    due_date: str | None = None
-    task_id: str | None = None
-    status: str | None = None
+    action: Literal["create_task", "update_task", "delete_task"]
+    title: str | None = Field(
+        default=None,
+        description="创建或改标题时填写；否则 null。",
+    )
+    description: str | None = Field(
+        default=None,
+        description="创建或改描述时填写；未提则 null，不要用空字符串占位。",
+    )
+    owner_id: str | None = Field(
+        default=None,
+        description="创建指定负责人或改负责人时填写对应 id；否则 null。",
+    )
+    due_date: str | None = Field(
+        default=None,
+        description="创建或改截止日期时填 YYYY-MM-DD；清空填空字符串；未提则 null。",
+    )
+    task_id: str | None = Field(
+        default=None,
+        description="改字段、删除时必须填写用户给出的任务 id；创建则为 null。",
+    )
+    status: str | None = Field(
+        default=None,
+        description="改状态时填写 todo / in_progress / done；创建或未改状态则为 null。",
+    )
 
 
 def _is_confirmed(approval: Any) -> bool:
@@ -197,8 +219,11 @@ def _plan_write(state: AgentState) -> WritePlan:
             SystemMessage(
                 content=(
                     "根据对话整理一条写操作。"
-                    "创建待办用 create_task；改状态用 update_task_status；删除、删掉、移除任务用 delete_task。"
-                    "delete_task 必须带用户给出的 task_id，禁止猜测 id。"
+                    "创建待办用 create_task；改标题、描述、负责人、截止日期、状态用 update_task；"
+                    "删除、删掉、移除任务用 delete_task。"
+                    "update_task 与 delete_task 必须带用户给出的 task_id，禁止猜测 id。"
+                    "update_task 只填要改的字段，未提到的必须为 null；改状态也走 update_task。"
+                    "改负责人时把姓名映射为 owner_id；用户没点名则 owner_id 必须为 null，禁止填当前用户。"
                     f"{_user_catalog_text()}"
                     "未指定负责人时不要猜测人名，owner_id 留空。"
                     "未指定任务id时必须留空，禁止猜测。"
@@ -216,30 +241,6 @@ def _validated_write_payload(
     plan: WritePlan, owner_id: str | None
 ) -> tuple[dict | None, dict | None]:
     """成功 (payload, None)；失败 (None, _abort_write(...))。确认前只读库、不写库。"""
-    if plan.action == "update_task_status":
-        task_id = (plan.task_id or "").strip()
-        new_status = (plan.status or "").strip()
-        if not task_id:
-            return None, _abort_write("missing_task_id", "更新状态需要 task_id。")
-        if new_status not in ALLOWED_STATUS:
-            return None, _abort_write(
-                "invalid_status",
-                "status 只能是 todo / in_progress / done。",
-                status=plan.status,
-            )
-        existing = _parse_json(get_task(task_id))
-        if existing.get("error") == "not_found":
-            return None, _abort_write("not_found", "找不到该任务。", task_id=task_id)
-        current_status = (existing.get("task") or {}).get("status")
-        if current_status == new_status:
-            return None, _abort_write(
-                "status_unchanged",
-                f"任务 {task_id} 当前已是 {new_status}，无需修改。",
-                task_id=task_id,
-                status=new_status,
-            )
-        return {"task_id": task_id, "status": new_status}, None
-
     if plan.action == "delete_task":
         task_id = (plan.task_id or "").strip()
         if not task_id:
@@ -252,6 +253,74 @@ def _validated_write_payload(
             "task_id": task_id,
             "title": task.get("title") or "",
         }, None
+
+    if plan.action == "update_task":
+        task_id = (plan.task_id or "").strip()
+        if not task_id:
+            return None, _abort_write("missing_task_id", "修改任务需要 task_id。")
+        existing = _parse_json(get_task(task_id))
+        if existing.get("error") == "not_found":
+            return None, _abort_write("not_found", "找不到该任务。", task_id=task_id)
+        task = existing.get("task") or {}
+        changes: dict[str, Any] = {}
+        if plan.title is not None:
+            title = plan.title.strip()
+            if not title:
+                return None, _abort_write("missing_title", "标题不能为空。")
+            changes["title"] = title
+        if plan.description is not None:
+            changes["description"] = plan.description
+        if plan.owner_id is not None:
+            owner_id = plan.owner_id.strip()
+            if not owner_id:
+                return None, _abort_write("missing_owner", "负责人不能为空。")
+            known = _known_user_ids()
+            if known and owner_id not in known:
+                return None, _abort_write(
+                    "unknown_owner",
+                    "负责人不在已知用户中。",
+                    owner_id=owner_id,
+                )
+            changes["owner_id"] = owner_id
+        if plan.due_date is not None:
+            due = plan.due_date.strip()
+            changes["due_date"] = due or None
+        if plan.status is not None:
+            new_status = plan.status.strip()
+            if new_status not in ALLOWED_STATUS:
+                return None, _abort_write(
+                    "invalid_status",
+                    "status 只能是 todo / in_progress / done。",
+                    status=plan.status,
+                )
+            changes["status"] = new_status
+        if not changes:
+            return None, _abort_write(
+                "missing_fields",
+                "修改任务需要标题、描述、负责人、截止日期或状态之一。",
+                task_id=task_id,
+            )
+        filtered: dict[str, Any] = {}
+        for key, value in changes.items():
+            current_value = task.get(key)
+            if key == "description":
+                changed = (current_value or "") != (value or "")
+            elif key == "due_date":
+                changed = (current_value or None) != (value or None)
+            else:
+                changed = current_value != value
+            if changed:
+                filtered[key] = value
+        if not filtered:
+            return None, _abort_write(
+                "fields_unchanged",
+                f"任务 {task_id} 要改的字段与当前值相同，无需修改。",
+                task_id=task_id,
+            )
+        return {"task_id": task_id, **filtered}, None
+
+    if plan.action != "create_task":
+        return None, _abort_write("unsupported_action", "无法识别的写操作。")
 
     title = (plan.title or "").strip()
     if not title:
@@ -267,8 +336,9 @@ def _validated_write_payload(
 
 
 def _commit_write(action: str, payload: dict) -> str:
-    if action == "update_task_status":
-        return update_task_status(payload["task_id"], payload["status"])
+    if action == "update_task":
+        fields = {key: value for key, value in payload.items() if key != "task_id"}
+        return update_task(payload["task_id"], fields)
     if action == "delete_task":
         return delete_task(payload["task_id"])
     return create_task(
@@ -282,8 +352,8 @@ def _commit_write(action: str, payload: dict) -> str:
 def _write_confirm_message(action: str) -> str:
     if action == "delete_task":
         return "即将删除任务，请确认或驳回"
-    if action == "update_task_status":
-        return "即将更新任务状态，请确认或驳回"
+    if action == "update_task":
+        return "即将更新任务，请确认或驳回"
     return "即将写入待办，请确认或驳回"
 
 
@@ -332,9 +402,9 @@ def respond_node(state: AgentState) -> dict:
         rules += (
             "上一跳已经处理完写入，结果在对话里。"
             "若出现「已取消写入」，告诉用户没有改库。"
-            "若出现 [write] 且 JSON 里 ok 为 true，说明创建、改状态或删除已经成功，并带上 task_id。"
+            "若出现 [write] 且 JSON 里 ok 为 true，说明创建、改字段或删除已经成功，并带上 task_id。"
             "若 JSON 里有 error，转述错误原因。"
-            "禁止说你无法创建或删除待办、无法调用工具、或还需要再确认一次。"
+            "禁止说你无法创建、修改或删除待办、无法调用工具、或还需要再确认一次。"
             "不要编造未出现的字段。"
         )
     elif last_route == "query_db":
