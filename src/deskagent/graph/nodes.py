@@ -14,6 +14,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel
 
 from deskagent.config import get_settings
+from deskagent.db import ALLOWED_STATUS
 from deskagent.graph.routing import get_chat_model
 from deskagent.graph.state import AgentState
 from deskagent.tools.docs import search_docs
@@ -154,6 +155,17 @@ def _is_confirmed(approval: Any) -> bool:
     return False
 
 
+def _abort_write(error: str, message: str, **extra: Any) -> dict:
+    payload = {"error": error, "message": message, **extra}
+    return {
+        "messages": [
+            AIMessage(content=f"[write]\n{json.dumps(payload, ensure_ascii=False)}")
+        ],
+        "pending_write": None,
+        "last_route": "write",
+    }
+
+
 def write_node(state: AgentState) -> dict:
     """整理拟写入内容后 interrupt；确认前不写 SQLite。"""
     llm = get_chat_model().with_structured_output(WritePlan)
@@ -173,15 +185,46 @@ def write_node(state: AgentState) -> dict:
         ]
     )
     owner_id = plan.owner_id or state.get("user_id") or None
+
     if plan.action == "update_task_status":
-        payload = {"task_id": plan.task_id, "status": plan.status}
+        task_id = (plan.task_id or "").strip()
+        new_status = (plan.status or "").strip()
+        if not task_id:
+            return _abort_write("missing_task_id", "更新状态需要 task_id。")
+        if new_status not in ALLOWED_STATUS:
+            return _abort_write(
+                "invalid_status",
+                "status 只能是 todo / in_progress / done。",
+                status=plan.status,
+            )
+        existing = _parse_json(get_task(task_id))
+        if existing.get("error") == "not_found":
+            return _abort_write("not_found", "找不到该任务。", task_id=task_id)
+        current_status = (existing.get("task") or {}).get("status")
+        if current_status == new_status:
+            return _abort_write(
+                "status_unchanged",
+                f"任务 {task_id} 当前已是 {new_status}，无需修改。",
+                task_id=task_id,
+                status=new_status,
+            )
+        payload = {"task_id": task_id, "status": new_status}
     else:
+        title = (plan.title or "").strip()
+        if not title:
+            return _abort_write("missing_title", "创建待办需要非空标题。")
+        if not owner_id:
+            return _abort_write(
+                "missing_owner",
+                "未指定负责人，且当前用户未知。",
+            )
         payload = {
-            "title": plan.title or "",
+            "title": title,
             "description": plan.description or "",
             "owner_id": owner_id,
             "due_date": plan.due_date,
         }
+
     pending = {
         "type": "write_task",
         "action": plan.action,
@@ -197,12 +240,7 @@ def write_node(state: AgentState) -> dict:
         }
 
     if plan.action == "update_task_status":
-        raw = update_task_status(plan.task_id or "", plan.status or "")
-    elif not payload["owner_id"]:
-        raw = json.dumps(
-            {"error": "missing_owner", "message": "未指定负责人，且当前用户未知。"},
-            ensure_ascii=False,
-        )
+        raw = update_task_status(payload["task_id"], payload["status"])
     else:
         raw = create_task(
             title=payload["title"],
