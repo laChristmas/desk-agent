@@ -11,6 +11,9 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "PyYAML>=6.0.1",
     "chromadb>=0.5.5",
+    "langgraph>=1.0",
+    "langchain>=1.0",
+    "langchain-openai>=1.0",
 ]
 
 [tool.setuptools.packages.find]
