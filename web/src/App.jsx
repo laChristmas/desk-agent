@@ -93,6 +93,7 @@ export default function App() {
 
       <main className="board">
         <section className="chat">
+          <h2>聊天记录</h2>
           {messages.length === 0 && (
             <p className="hint">
               试试：「退款周期是多久？给出处。」或「帮我建一条待办：发货前核对收货地址」
@@ -155,7 +156,7 @@ export default function App() {
         }}
       >
         <textarea
-          rows={3}
+          rows={8}
           value={draft}
           disabled={busy || Boolean(pending)}
           placeholder={pending ? "请先确认或驳回写入" : "输入问题，Enter 发送，Shift+Enter 换行"}

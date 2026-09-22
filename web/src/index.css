@@ -120,6 +120,7 @@ textarea {
   color: var(--muted);
 }
 
+.chat h2,
 .cites h2,
 .pending h2 {
   margin: 0 0 8px;
@@ -192,6 +193,11 @@ button.primary:hover:not(:disabled) {
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: end;
+}
+
+.composer textarea {
+  min-height: 160px;
+  resize: vertical;
 }
 
 .error {
