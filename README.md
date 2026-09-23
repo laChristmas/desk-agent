@@ -2,7 +2,7 @@
 
 Northwind Labs 内部工作台 Agent：按问题检索制度、查询待办、在人工确认后写入 SQLite。
 
-当前仓库覆盖 **数据与检索 → 工具 → LangGraph（含 interrupt）→ FastAPI SSE → React 工作台**。
+当前仓库覆盖 **数据与检索 → 工具 → LangGraph（含 interrupt）→ FastAPI SSE → React 工作台 → 评测集**。
 
 ## 能证明什么
 
@@ -64,9 +64,11 @@ desk-agent/
   data/
     kb/                    # 四篇 Markdown
     seed/                  # users.json、tasks.json
+    eval/cases.json        # E01–E15
   scripts/
     ingest.py              # 建库 + 入库 + 检索断言
     demo_replay.py         # 三条路径回放（需 LLM）
+    eval.py                # 15 条图评测（需 LLM）
   tests/test_tasks.py      # 任务工具单测（不调 LLM）
 ```
 
@@ -103,6 +105,14 @@ python -m scripts.demo_replay
 
 依赖已 ingest、且 `.env` 有 Key。成功时打印四段 `OK`：检索、查库、写入驳回、写入确认。确认那条会在 `desk.sqlite` 里多一条待办；要回到种子数据再跑 `python -m scripts.ingest`。
 
+15 条图评测（临时任务库，不改 `data/desk.sqlite`）：
+
+```bash
+python -m scripts.eval
+```
+
+可加用例 id 只跑一条，例如 `python -m scripts.eval E01`。无 `LLM_API_KEY` 时跳过并返回 0。知识库仍用已 ingest 的 Chroma。
+
 会话按 `thread_id` 存在 `CHECKPOINT_PATH`（默认 `data/checkpoints.sqlite`）。同一 `thread_id` 换进程也能 `get_state` / `Command(resume=...)` 续跑。
 
 工作台（两个终端）：
@@ -129,6 +139,4 @@ python -m pytest tests/test_tasks.py -q
 
 用例使用临时 SQLite，不会改 `data/desk.sqlite`。覆盖：进行中列表、`not_found`、创建、部分更新标题/描述/负责人/截止日期/状态、清空截止日期、非法 status 不写库、空标题不写库、删除已有任务、删除缺失 id。
 
-## 尚未包含
-
-评测集不在本阶段。
+生成类路径用 `python -m scripts.eval` 打图，需 API Key。

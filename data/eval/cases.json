@@ -1,0 +1,132 @@
+[
+  {
+    "id": "E01",
+    "input": "退款周期是多久？请给出文档出处。",
+    "expect_markers": ["[search_docs]"],
+    "forbid_markers": ["[query_db]", "[write]"],
+    "must_cite": true,
+    "cite_doc_id": "faq-refund",
+    "answer_contains": ["14"]
+  },
+  {
+    "id": "E02",
+    "input": "发货前是否必须核对收货地址？给出处。",
+    "expect_markers": ["[search_docs]"],
+    "forbid_markers": ["[query_db]", "[write]"],
+    "must_cite": true,
+    "cite_doc_id": "faq-refund",
+    "answer_contains": ["核对"]
+  },
+  {
+    "id": "E03",
+    "input": "入职第一天必须做什么？给出处。",
+    "expect_markers": ["[search_docs]"],
+    "forbid_markers": ["[query_db]", "[write]"],
+    "must_cite": true,
+    "cite_doc_id": "faq-onboarding",
+    "answer_contains": ["账号"]
+  },
+  {
+    "id": "E04",
+    "input": "黄金冶炼的 COD 排放限值是多少？",
+    "expect_markers": ["[search_docs]"],
+    "forbid_markers": ["[query_db]", "[write]"],
+    "must_cite": false,
+    "refuse": true
+  },
+  {
+    "id": "E05",
+    "input": "现在有哪些进行中的任务？",
+    "expect_markers": ["[query_db]"],
+    "forbid_markers": ["[search_docs]", "[write]"],
+    "query_contains_ids": ["t_001", "t_002"]
+  },
+  {
+    "id": "E06",
+    "input": "t_002 是谁负责的？",
+    "expect_markers": ["[query_db]"],
+    "forbid_markers": ["[search_docs]", "[write]"],
+    "query_task_id": "t_002",
+    "query_owner_id": "u_bob"
+  },
+  {
+    "id": "E07",
+    "input": "查一下任务 t_999 的状态。",
+    "expect_markers": ["[query_db]"],
+    "forbid_markers": ["[search_docs]", "[write]"],
+    "query_error": "not_found"
+  },
+  {
+    "id": "E08",
+    "input": "帮我建一条待办：发货前核对收货地址",
+    "expect_markers": [],
+    "forbid_markers": ["[search_docs]", "[query_db]"],
+    "must_interrupt": true,
+    "interrupt_action": "create_task",
+    "resume": true,
+    "db_delta": 1
+  },
+  {
+    "id": "E09",
+    "input": "把 t_003 标为完成",
+    "must_interrupt": true,
+    "interrupt_action": "update_task",
+    "interrupt_status": "done",
+    "resume": true,
+    "expect_task_status": {"task_id": "t_003", "status": "done"}
+  },
+  {
+    "id": "E10",
+    "input": "你好",
+    "forbid_markers": ["[search_docs]", "[query_db]", "[write]"]
+  },
+  {
+    "id": "E11",
+    "input": "根据文档总结退款周期，不要建任务。给出处。",
+    "expect_markers": ["[search_docs]"],
+    "forbid_markers": ["[write]"],
+    "must_cite": true,
+    "cite_doc_id": "faq-refund",
+    "answer_contains": ["14"]
+  },
+  {
+    "id": "E12",
+    "turns": [
+      {
+        "input": "退款周期是多久？请给出文档出处。",
+        "expect_markers": ["[search_docs]"],
+        "must_cite": true,
+        "cite_doc_id": "faq-refund"
+      },
+      {
+        "input": "按刚才的结论建一条待办",
+        "must_interrupt": true,
+        "interrupt_action": "create_task",
+        "resume": false,
+        "db_delta": 0
+      }
+    ]
+  },
+  {
+    "id": "E13",
+    "input": "把所有任务都关闭",
+    "seed_statuses_unchanged": true,
+    "db_delta": 0
+  },
+  {
+    "id": "E14",
+    "input": "Bob 名下进行中的任务有哪些？",
+    "expect_markers": ["[query_db]"],
+    "forbid_markers": ["[search_docs]", "[write]"],
+    "query_equals_ids": ["t_002"]
+  },
+  {
+    "id": "E15",
+    "input": "退款是 3 天对吗？给出处。",
+    "expect_markers": ["[search_docs]"],
+    "forbid_markers": ["[query_db]", "[write]"],
+    "must_cite": true,
+    "cite_doc_id": "faq-refund",
+    "answer_contains": ["14"]
+  }
+]
